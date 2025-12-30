@@ -3,6 +3,7 @@
  * 法令・Q&A・ガイドラインを取得し、ベクトルストアに格納
  */
 
+import "dotenv/config";
 import { join } from "path";
 import { fetchKeihyoLaw } from "../src/data/loaders/egov.js";
 import { fetchAllQa } from "../src/data/loaders/qa.js";

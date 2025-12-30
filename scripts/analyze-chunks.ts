@@ -42,7 +42,9 @@ function calcStats(lengths: number[]): ChunkStats {
 
 function printStats(name: string, stats: ChunkStats) {
   console.log(`  チャンク数: ${stats.count}`);
-  console.log(`  文字数: 最小=${stats.minLength}, 最大=${stats.maxLength}, 平均=${stats.avgLength}`);
+  console.log(
+    `  文字数: 最小=${stats.minLength}, 最大=${stats.maxLength}, 平均=${stats.avgLength}`,
+  );
   if (stats.tooSmall > 0 || stats.tooLarge > 0) {
     console.log(`  ⚠ サイズ問題: 小さすぎ=${stats.tooSmall}件, 大きすぎ=${stats.tooLarge}件`);
   } else {

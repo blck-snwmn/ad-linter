@@ -47,9 +47,10 @@ export interface StoredDocument {
   vector: number[];
   source: SourceType;
   // 頻繁にフィルタリングされるフィールドは個別カラムとして保存
-  articleNumber: string | null; // 法令: 条番号
-  category: string | null; // Q&A/ガイドライン: カテゴリ
-  filename: string | null; // ガイドライン: ファイル名
+  // Note: LanceDBはnullの型推論ができないため空文字列を使用
+  articleNumber: string; // 法令: 条番号（なければ空文字列）
+  category: string; // Q&A/ガイドライン: カテゴリ（なければ空文字列）
+  filename: string; // ガイドライン: ファイル名（なければ空文字列）
   metadata: string; // その他メタデータはJSON文字列として保存
 }
 
@@ -57,10 +58,10 @@ export interface SearchResult {
   id: string;
   content: string;
   source: SourceType;
-  // 頻繁にアクセスされるフィールドを直接公開
-  articleNumber: string | null;
-  category: string | null;
-  filename: string | null;
+  // 頻繁にアクセスされるフィールドを直接公開（空文字列は「なし」を意味）
+  articleNumber: string;
+  category: string;
+  filename: string;
   metadata: Record<string, unknown>;
   score: number;
 }
@@ -144,9 +145,10 @@ export async function addDocuments(chunks: DocumentChunk[]): Promise<void> {
       vector: vectors[i],
       source: meta.source,
       // 頻繁にフィルタリングされるフィールドを個別カラムに展開
-      articleNumber: "articleNumber" in meta ? (meta.articleNumber as string) : null,
-      category: "category" in meta ? (meta.category as string) : null,
-      filename: "filename" in meta ? (meta.filename as string) : null,
+      // Note: LanceDBはnullの型推論ができないため空文字列を使用
+      articleNumber: "articleNumber" in meta ? String(meta.articleNumber) : "",
+      category: "category" in meta ? String(meta.category) : "",
+      filename: "filename" in meta ? String(meta.filename) : "",
       metadata: JSON.stringify(meta),
     };
   });
@@ -218,9 +220,9 @@ function parseSearchResult(row: Record<string, unknown>): SearchResult {
     id,
     content,
     source: validatedSource,
-    articleNumber: typeof articleNumber === "string" ? articleNumber : null,
-    category: typeof category === "string" ? category : null,
-    filename: typeof filename === "string" ? filename : null,
+    articleNumber: typeof articleNumber === "string" ? articleNumber : "",
+    category: typeof category === "string" ? category : "",
+    filename: typeof filename === "string" ? filename : "",
     metadata,
     score: distance,
   };
@@ -282,6 +284,7 @@ export async function search(
 /**
  * 複数ソースから並列検索
  * デフォルトで法令・ガイドライン・Q&A全てを検索
+ * 結果は距離（類似度）順にソート
  */
 export async function multiSearch(
   query: string,
@@ -296,7 +299,8 @@ export async function multiSearch(
   const searches = sources.map((source) => search(query, { limit: limitPerSource, source }));
 
   const results = await Promise.all(searches);
-  return results.flat();
+  // 全結果を距離順（昇順）でソート
+  return results.flat().sort((a, b) => a.score - b.score);
 }
 
 /**

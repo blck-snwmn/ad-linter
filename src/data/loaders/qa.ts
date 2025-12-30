@@ -26,7 +26,7 @@ export interface QaItem {
 }
 
 export interface QaData {
-  source: "representation" | "premium" | "guideline";
+  source: "representation" | "premium" | "guideline" | "purchase";
   title: string;
   url: string;
   items: QaItem[];
@@ -42,6 +42,8 @@ const QA_URLS = {
   premium: "https://www.caa.go.jp/policies/policy/representation/fair_labeling/faq/premium/",
   /** 指針に関するQ&A */
   guideline: "https://www.caa.go.jp/policies/policy/representation/fair_labeling/faq/guideline/",
+  /** 買取サービスに関するQ&A */
+  purchase: "https://www.caa.go.jp/policies/policy/representation/fair_labeling/faq/purchase/",
 } as const;
 
 export type QaSource = keyof typeof QA_URLS;
@@ -90,11 +92,7 @@ function parseQaHtml(html: string, source: QaSource): { title: string; items: Qa
     while ($prev.length > 0) {
       if ($prev[0].tagName.toLowerCase() === "h2") {
         const headingText = $prev.text().trim();
-        if (
-          headingText &&
-          !headingText.includes("消費者の方") &&
-          !headingText.includes("相談員")
-        ) {
+        if (headingText && !headingText.includes("消費者の方") && !headingText.includes("相談員")) {
           category = headingText;
         }
         break;
@@ -137,10 +135,7 @@ function parseQaHtml(html: string, source: QaSource): { title: string; items: Qa
         answerText = $answerDiv.text().trim();
       } else {
         // div がない場合は dd 全体のテキストから "A" を除去
-        answerText = $dd
-          .text()
-          .trim()
-          .replace(/^A\s*/, "");
+        answerText = $dd.text().trim().replace(/^A\s*/, "");
       }
 
       if (answerText && answerText.length > 10) {
@@ -185,7 +180,8 @@ function parseQaHtml(html: string, source: QaSource): { title: string; items: Qa
       if ($dt.length > 0) {
         const $dd = $dt.next("dd");
         if ($dd.length > 0) {
-          const answerText = $dd.find("> div").text().trim() || $dd.text().replace(/^A\s*/, "").trim();
+          const answerText =
+            $dd.find("> div").text().trim() || $dd.text().replace(/^A\s*/, "").trim();
           if (answerText.length > 10) {
             items.push({
               id: `${source}-${qa.targetId}`,
@@ -266,7 +262,7 @@ export async function fetchAllQa(): Promise<{
   data: QaData[];
   errors: QaLoadError[];
 }> {
-  const sources: QaSource[] = ["representation", "premium", "guideline"];
+  const sources: QaSource[] = ["representation", "premium", "guideline", "purchase"];
   const data: QaData[] = [];
   const errors: QaLoadError[] = [];
 

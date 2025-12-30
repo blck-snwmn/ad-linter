@@ -240,14 +240,16 @@ export const GUIDELINE_PDFS: GuidelineInfo[] = [
   },
   {
     id: "mobile-terminal-sales",
-    title: "携帯電話等の移動系通信の端末の販売に関する店頭広告表示についての景品表示法上の考え方等の公表について",
+    title:
+      "携帯電話等の移動系通信の端末の販売に関する店頭広告表示についての景品表示法上の考え方等の公表について",
     url: "https://www.caa.go.jp/policies/policy/representation/fair_labeling/pdf/fair_labeling_181113_0001.pdf",
     filename: "28-mobile-terminal-sales.pdf",
     category: "表示関係",
   },
   {
     id: "mobile-terminal-mnp",
-    title: "携帯電話端末の店頭広告表示等の適正化について～携帯電話端末の店頭広告表示とMNPにおける違約金の問題への対応～",
+    title:
+      "携帯電話端末の店頭広告表示等の適正化について～携帯電話端末の店頭広告表示とMNPにおける違約金の問題への対応～",
     url: "https://www.caa.go.jp/policies/policy/representation/fair_labeling/information_other/2019/pdf/information_other_2019_190625_0001.pdf",
     filename: "29-mobile-terminal-mnp.pdf",
     category: "表示関係",
@@ -275,6 +277,57 @@ export const GUIDELINE_PDFS: GuidelineInfo[] = [
     url: "https://www.caa.go.jp/policies/policy/representation/fair_labeling/guideline/pdf/160225premiums_1.pdf",
     filename: "32-violation-cases.pdf",
     category: "違反事例集",
+  },
+  // === 景品Q&A ===
+  // Note: Q&AページはHTMLがナビゲーションのみでPDFで提供されているため、ここで取得
+  {
+    id: "premium-qa-all",
+    title: "景品に関するQ&A一覧",
+    url: "https://www.caa.go.jp/policies/policy/representation/fair_labeling/faq/premium/assets/representation_cms220_250620_01.pdf",
+    filename: "33-premium-qa-all.pdf",
+    category: "景品Q&A",
+  },
+  {
+    id: "premium-qa-definition",
+    title: "景品Q&A：景品類とは",
+    url: "https://www.caa.go.jp/policies/policy/representation/fair_labeling/faq/premium/assets/representation_cms220_240418_02.pdf",
+    filename: "34-premium-qa-definition.pdf",
+    category: "景品Q&A",
+  },
+  {
+    id: "premium-qa-not-premium",
+    title: "景品Q&A：景品類ではないもの",
+    url: "https://www.caa.go.jp/policies/policy/representation/fair_labeling/faq/premium/pdf/representation_cms220_230630_03.pdf",
+    filename: "35-premium-qa-not-premium.pdf",
+    category: "景品Q&A",
+  },
+  {
+    id: "premium-qa-regulation",
+    title: "景品Q&A：景品規制について",
+    url: "https://www.caa.go.jp/policies/policy/representation/fair_labeling/faq/premium/pdf/representation_cms220_230630_04.pdf",
+    filename: "36-premium-qa-regulation.pdf",
+    category: "景品Q&A",
+  },
+  {
+    id: "premium-qa-general-lottery",
+    title: "景品Q&A：一般懸賞について",
+    url: "https://www.caa.go.jp/policies/policy/representation/fair_labeling/faq/premium/pdf/representation_cms220_230630_05.pdf",
+    filename: "37-premium-qa-general-lottery.pdf",
+    category: "景品Q&A",
+  },
+  {
+    id: "premium-qa-joint-lottery",
+    title: "景品Q&A：共同懸賞について",
+    url: "https://www.caa.go.jp/policies/policy/representation/fair_labeling/faq/premium/pdf/representation_cms220_230630_06.pdf",
+    filename: "38-premium-qa-joint-lottery.pdf",
+    category: "景品Q&A",
+  },
+  {
+    id: "premium-qa-total-premium",
+    title: "景品Q&A：総付景品について",
+    url: "https://www.caa.go.jp/policies/policy/representation/fair_labeling/faq/premium/pdf/representation_cms220_230630_07.pdf",
+    filename: "39-premium-qa-total-premium.pdf",
+    category: "景品Q&A",
   },
 ];
 
@@ -315,17 +368,9 @@ export async function downloadGuideline(
   } catch (e) {
     if (e instanceof AxiosError) {
       if (e.response?.status === 404) {
-        throw new GuidelineDownloadError(
-          `Guideline PDF not found: ${info.url}`,
-          info.url,
-          e,
-        );
+        throw new GuidelineDownloadError(`Guideline PDF not found: ${info.url}`, info.url, e);
       }
-      throw new GuidelineDownloadError(
-        `Failed to download guideline: ${e.message}`,
-        info.url,
-        e,
-      );
+      throw new GuidelineDownloadError(`Failed to download guideline: ${e.message}`, info.url, e);
     }
     throw new GuidelineDownloadError(
       `Failed to download guideline: ${e instanceof Error ? e.message : String(e)}`,
@@ -426,9 +471,7 @@ export async function downloadAllGuidelines(
 /**
  * ダウンロード済みガイドラインを読み込み
  */
-export async function loadDownloadedGuidelines(
-  outputDir: string,
-): Promise<{
+export async function loadDownloadedGuidelines(outputDir: string): Promise<{
   documents: (PdfDocument & { guidelineInfo: GuidelineInfo })[];
   errors: (PdfLoadError | GuidelineDownloadError)[];
 }> {

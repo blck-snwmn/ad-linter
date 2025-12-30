@@ -4,7 +4,11 @@
  */
 
 import { join } from "path";
-import { downloadAllGuidelines, loadDownloadedGuidelines, GUIDELINE_PDFS } from "../src/data/loaders/guideline.js";
+import {
+  downloadAllGuidelines,
+  loadDownloadedGuidelines,
+  GUIDELINE_PDFS,
+} from "../src/data/loaders/guideline.js";
 
 const OUTPUT_DIR = join(process.cwd(), "data", "raw");
 
@@ -26,7 +30,9 @@ async function main() {
   }
 
   console.log("ダウンロード中...\n");
-  const { downloaded, skipped, errors } = await downloadAllGuidelines(OUTPUT_DIR, { forceRedownload });
+  const { downloaded, skipped, errors } = await downloadAllGuidelines(OUTPUT_DIR, {
+    forceRedownload,
+  });
 
   // 結果表示
   if (downloaded.length > 0) {
