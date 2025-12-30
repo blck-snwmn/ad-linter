@@ -30,7 +30,7 @@ export interface GuidelineChunkerOptions {
 const DEFAULT_OPTIONS: Required<GuidelineChunkerOptions> = {
   chunkSize: 1000,
   chunkOverlap: 200,
-  sectionPattern: /^(?:第[一二三四五六七八九十\d]+[章節条]|[\d]+[\.．]|\([\d]+\)|【[^】]+】)/m,
+  sectionPattern: /^(?:第[一二三四五六七八九十\d]+[章節条]|[\d]+[.．]|\([\d]+\)|【[^】]+】)/m,
 };
 
 /**
@@ -38,7 +38,7 @@ const DEFAULT_OPTIONS: Required<GuidelineChunkerOptions> = {
  */
 function splitIntoSections(
   text: string,
-  sectionPattern: RegExp
+  sectionPattern: RegExp,
 ): { title?: string; content: string }[] {
   const sections: { title?: string; content: string }[] = [];
   const lines = text.split("\n");
@@ -75,11 +75,7 @@ function splitIntoSections(
 /**
  * テキストを固定サイズ + オーバーラップでチャンク分割
  */
-function splitWithOverlap(
-  text: string,
-  chunkSize: number,
-  chunkOverlap: number
-): string[] {
+function splitWithOverlap(text: string, chunkSize: number, chunkOverlap: number): string[] {
   const chunks: string[] = [];
 
   if (text.length <= chunkSize) {
@@ -116,7 +112,7 @@ function splitWithOverlap(
  */
 export function chunkGuideline(
   doc: PdfDocument,
-  options: GuidelineChunkerOptions = {}
+  options: GuidelineChunkerOptions = {},
 ): GuidelineChunk[] {
   const opts = { ...DEFAULT_OPTIONS, ...options };
   const chunks: GuidelineChunk[] = [];
@@ -127,18 +123,12 @@ export function chunkGuideline(
   let chunkIndex = 0;
   for (const section of sections) {
     // セクションが大きい場合はさらに分割
-    const sectionChunks = splitWithOverlap(
-      section.content,
-      opts.chunkSize,
-      opts.chunkOverlap
-    );
+    const sectionChunks = splitWithOverlap(section.content, opts.chunkSize, opts.chunkOverlap);
 
     for (const content of sectionChunks) {
       if (!content.trim()) continue;
 
-      const chunkContent = section.title
-        ? `${section.title}\n\n${content}`
-        : content;
+      const chunkContent = section.title ? `${section.title}\n\n${content}` : content;
 
       chunks.push({
         id: `${doc.filename}-chunk${chunkIndex}`,

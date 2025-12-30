@@ -8,8 +8,12 @@
     "build": "tsc",
     "dev": "tsx src/index.ts",
     "ingest": "tsx scripts/ingest.ts",
+    "test:fetch": "tsx scripts/test-fetch.ts",
     "compare-llms": "tsx scripts/compare-llms.ts",
-    "lint": "eslint src --ext .ts",
+    "lint": "oxlint src scripts",
+    "lint:fix": "oxlint src scripts --fix",
+    "format": "oxfmt src scripts --write",
+    "format:check": "oxfmt src scripts --check",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -27,6 +31,8 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/pdf-parse": "^1.1.4",
+    "oxfmt": "^0.21.0",
+    "oxlint": "^1.36.0",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0"
   },

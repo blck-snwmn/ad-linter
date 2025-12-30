@@ -3,7 +3,7 @@
  * 条・項・号単位でチャンク分割する
  */
 
-import type { LawArticle, LawData } from "../loaders/egov.js";
+import type { LawData } from "../loaders/egov.js";
 
 export interface LawChunk {
   id: string;
@@ -23,8 +23,6 @@ export interface LawChunk {
 export interface LawChunkerOptions {
   /** チャンク単位: article=条単位, paragraph=項単位 */
   chunkBy: "article" | "paragraph";
-  /** 条のタイトルを含めるか */
-  includeArticleTitle?: boolean;
 }
 
 /**
@@ -49,8 +47,7 @@ function chunkByArticle(law: LawData): LawChunk[] {
 
     // 項
     for (const paragraph of article.paragraphs) {
-      const prefix =
-        paragraph.paragraphNumber === 1 ? "" : `${paragraph.paragraphNumber}　`;
+      const prefix = paragraph.paragraphNumber === 1 ? "" : `${paragraph.paragraphNumber}　`;
       lines.push(`${prefix}${paragraph.content}`);
 
       // 号
@@ -111,8 +108,7 @@ function chunkByParagraph(law: LawData): LawChunk[] {
       // 条のタイトルを含める（コンテキストのため）
       lines.push(articleTitle);
 
-      const prefix =
-        paragraph.paragraphNumber === 1 ? "" : `${paragraph.paragraphNumber}　`;
+      const prefix = paragraph.paragraphNumber === 1 ? "" : `${paragraph.paragraphNumber}　`;
       lines.push(`${prefix}${paragraph.content}`);
 
       // 号を含める
@@ -144,7 +140,7 @@ function chunkByParagraph(law: LawData): LawChunk[] {
  */
 export function chunkLaw(
   law: LawData,
-  options: LawChunkerOptions = { chunkBy: "article" }
+  options: LawChunkerOptions = { chunkBy: "article" },
 ): LawChunk[] {
   switch (options.chunkBy) {
     case "article":

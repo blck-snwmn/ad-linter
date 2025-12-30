@@ -3,7 +3,30 @@
  * https://laws.e-gov.go.jp/api/2/swagger-ui/
  */
 
-import axios from "axios";
+import axios, { AxiosError } from "axios";
+
+/** e-Gov API関連のエラー */
+export class EgovApiError extends Error {
+  constructor(
+    message: string,
+    public readonly statusCode?: number,
+    public readonly cause?: Error,
+  ) {
+    super(message);
+    this.name = "EgovApiError";
+  }
+}
+
+/** XMLパース関連のエラー */
+export class XmlParseError extends Error {
+  constructor(
+    message: string,
+    public readonly cause?: Error,
+  ) {
+    super(message);
+    this.name = "XmlParseError";
+  }
+}
 
 const EGOV_API_BASE = "https://laws.e-gov.go.jp/api/2";
 
@@ -39,8 +62,7 @@ function parseLawXml(xml: string): LawArticle[] {
   const articles: LawArticle[] = [];
 
   // 条（Article）を抽出
-  const articleRegex =
-    /<Article[^>]*Num="(\d+)"[^>]*>[\s\S]*?<\/Article>/g;
+  const articleRegex = /<Article[^>]*Num="(\d+)"[^>]*>[\s\S]*?<\/Article>/g;
   let articleMatch;
 
   while ((articleMatch = articleRegex.exec(xml)) !== null) {
@@ -53,8 +75,7 @@ function parseLawXml(xml: string): LawArticle[] {
 
     // 項（Paragraph）を抽出
     const paragraphs: LawArticle["paragraphs"] = [];
-    const paragraphRegex =
-      /<Paragraph[^>]*Num="(\d+)"[^>]*>[\s\S]*?<\/Paragraph>/g;
+    const paragraphRegex = /<Paragraph[^>]*Num="(\d+)"[^>]*>[\s\S]*?<\/Paragraph>/g;
     let paragraphMatch;
 
     while ((paragraphMatch = paragraphRegex.exec(articleXml)) !== null) {
@@ -62,13 +83,9 @@ function parseLawXml(xml: string): LawArticle[] {
       const paragraphXml = paragraphMatch[0];
 
       // 項の本文（Sentence）
-      const sentenceMatches = paragraphXml.match(
-        /<Sentence[^>]*>([^<]+)<\/Sentence>/g
-      );
+      const sentenceMatches = paragraphXml.match(/<Sentence[^>]*>([^<]+)<\/Sentence>/g);
       const paragraphContent = sentenceMatches
-        ? sentenceMatches
-            .map((s) => s.replace(/<\/?Sentence[^>]*>/g, ""))
-            .join("")
+        ? sentenceMatches.map((s) => s.replace(/<\/?Sentence[^>]*>/g, "")).join("")
         : "";
 
       // 号（Item）を抽出
@@ -79,13 +96,9 @@ function parseLawXml(xml: string): LawArticle[] {
       while ((itemMatch = itemRegex.exec(paragraphXml)) !== null) {
         const itemNum = itemMatch[1];
         const itemXml = itemMatch[0];
-        const itemSentences = itemXml.match(
-          /<Sentence[^>]*>([^<]+)<\/Sentence>/g
-        );
+        const itemSentences = itemXml.match(/<Sentence[^>]*>([^<]+)<\/Sentence>/g);
         const itemContent = itemSentences
-          ? itemSentences
-              .map((s) => s.replace(/<\/?Sentence[^>]*>/g, ""))
-              .join("")
+          ? itemSentences.map((s) => s.replace(/<\/?Sentence[^>]*>/g, "")).join("")
           : "";
 
         items.push({
@@ -104,13 +117,9 @@ function parseLawXml(xml: string): LawArticle[] {
     // 条全体のコンテンツ（項がない場合のフォールバック）
     let articleContent = "";
     if (paragraphs.length === 0) {
-      const sentenceMatches = articleXml.match(
-        /<Sentence[^>]*>([^<]+)<\/Sentence>/g
-      );
+      const sentenceMatches = articleXml.match(/<Sentence[^>]*>([^<]+)<\/Sentence>/g);
       articleContent = sentenceMatches
-        ? sentenceMatches
-            .map((s) => s.replace(/<\/?Sentence[^>]*>/g, ""))
-            .join("")
+        ? sentenceMatches.map((s) => s.replace(/<\/?Sentence[^>]*>/g, "")).join("")
         : "";
     }
 
@@ -127,23 +136,62 @@ function parseLawXml(xml: string): LawArticle[] {
 
 /**
  * 景品表示法の条文を取得
+ * @throws {EgovApiError} APIリクエスト失敗時
+ * @throws {XmlParseError} XMLパース失敗時
  */
 export async function fetchKeihyoLaw(): Promise<LawData> {
-  const url = `${EGOV_API_BASE}/laws/${KEIHYO_LAW_ID}`;
+  const url = `${EGOV_API_BASE}/law_data/${KEIHYO_LAW_ID}`;
 
-  const response = await axios.get(url, {
-    headers: {
-      Accept: "application/xml",
-    },
-  });
+  let xml: string;
+  try {
+    const response = await axios.get(url, {
+      headers: {
+        Accept: "application/xml",
+      },
+      timeout: 30000, // 30秒タイムアウト
+    });
+    xml = response.data as string;
+  } catch (e) {
+    if (e instanceof AxiosError) {
+      throw new EgovApiError(
+        `Failed to fetch law from e-Gov API: ${e.message}`,
+        e.response?.status,
+        e,
+      );
+    }
+    throw new EgovApiError(
+      `Failed to fetch law from e-Gov API: ${e instanceof Error ? e.message : String(e)}`,
+      undefined,
+      e instanceof Error ? e : undefined,
+    );
+  }
 
-  const xml = response.data as string;
+  // XMLの基本的な検証
+  if (!xml || typeof xml !== "string") {
+    throw new XmlParseError("Invalid response: expected XML string");
+  }
+
+  if (!xml.includes("<law_full_text>") && !xml.includes("<Law>")) {
+    throw new XmlParseError("Invalid response: does not appear to be valid law XML");
+  }
 
   // 法令番号とタイトルを抽出
   const lawNumMatch = xml.match(/<LawNum>([^<]+)<\/LawNum>/);
   const lawTitleMatch = xml.match(/<LawTitle>([^<]+)<\/LawTitle>/);
 
-  const articles = parseLawXml(xml);
+  let articles: LawArticle[];
+  try {
+    articles = parseLawXml(xml);
+  } catch (e) {
+    throw new XmlParseError(
+      `Failed to parse law XML: ${e instanceof Error ? e.message : String(e)}`,
+      e instanceof Error ? e : undefined,
+    );
+  }
+
+  if (articles.length === 0) {
+    throw new XmlParseError("No articles found in law XML");
+  }
 
   return {
     lawId: KEIHYO_LAW_ID,
@@ -171,8 +219,7 @@ export function articleToText(article: LawArticle): string {
   }
 
   for (const paragraph of article.paragraphs) {
-    const prefix =
-      paragraph.paragraphNumber === 1 ? "" : `${paragraph.paragraphNumber}　`;
+    const prefix = paragraph.paragraphNumber === 1 ? "" : `${paragraph.paragraphNumber}　`;
     lines.push(`${prefix}${paragraph.content}`);
 
     for (const item of paragraph.items) {
