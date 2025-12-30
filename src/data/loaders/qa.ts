@@ -48,98 +48,155 @@ export type QaSource = keyof typeof QA_URLS;
 
 /**
  * HTMLからQ&Aを抽出
+ * 消費者庁Q&Aページの実際の構造:
+ *
+ * representation/guideline ページ:
+ *   <dl>
+ *     <dt>
+ *       <span class="question" id="q1">Q1</span>
+ *       <span>質問文</span>
+ *     </dt>
+ *     <dd>
+ *       <span>A</span>
+ *       <div>回答文</div>
+ *     </dd>
+ *   </dl>
+ *
+ * premium ページ:
+ *   ナビゲーションのみ（Q&Aコンテンツなし、PDFダウンロードリンクあり）
  */
 function parseQaHtml(html: string, source: QaSource): { title: string; items: QaItem[] } {
   const $ = cheerio.load(html);
   const items: QaItem[] = [];
 
   // ページタイトルを取得
-  const title = $("h1").first().text().trim() || $("title").text().trim() || "景品表示法Q&A";
+  const title =
+    $("#main h1, article h1").first().text().trim() ||
+    $("h1").first().text().trim() ||
+    "景品表示法Q&A";
 
-  // 現在のカテゴリを追跡
-  let currentCategory = "一般";
+  // メインコンテンツエリアを特定
+  const $main = $("#main, article").first();
+  const $content = $main.length > 0 ? $main : $("body");
 
-  // Q&Aセクションを探す
-  // 消費者庁のページは通常、定義リスト(dl/dt/dd)またはdiv構造を使用
-  $("h2, h3, h4, dl, .qa-item, [class*='qa']").each((_, element) => {
-    const $el = $(element);
-    const tagName = element.tagName?.toLowerCase();
+  // パターン1（優先）: dl/dt/dd 形式（消費者庁Q&Aの実際の構造）
+  // 各dlを処理
+  $content.find("dl").each((_, dl) => {
+    const $dl = $(dl);
 
-    // 見出しはカテゴリとして扱う
-    if (tagName === "h2" || tagName === "h3" || tagName === "h4") {
-      const text = $el.text().trim();
-      if (text && !text.includes("Q&A") && !text.includes("よくある質問")) {
-        currentCategory = text;
-      }
-      return;
-    }
-
-    // 定義リスト形式のQ&A
-    if (tagName === "dl") {
-      const dts = $el.find("dt");
-      const dds = $el.find("dd");
-
-      dts.each((i, dt) => {
-        const question = $(dt).text().trim();
-        const answer = $(dds.eq(i)).text().trim();
-
-        if (question && answer) {
-          items.push({
-            id: `${source}-q${items.length + 1}`,
-            category: currentCategory,
-            question: cleanText(question),
-            answer: cleanText(answer),
-          });
+    // この dl の直前の h2 を探してカテゴリを特定
+    let category = "一般";
+    let $prev = $dl.prev();
+    while ($prev.length > 0) {
+      if ($prev[0].tagName.toLowerCase() === "h2") {
+        const headingText = $prev.text().trim();
+        if (
+          headingText &&
+          !headingText.includes("消費者の方") &&
+          !headingText.includes("相談員")
+        ) {
+          category = headingText;
         }
-      });
+        break;
+      }
+      $prev = $prev.prev();
     }
+
+    // dt/dd ペアを処理
+    const dts = $dl.find("> dt");
+    dts.each((i, dt) => {
+      const $dt = $(dt);
+
+      // 質問を取得: <span class="question" id="qN">QN</span> の次の <span> から
+      const $questionSpan = $dt.find("span.question");
+      if ($questionSpan.length === 0) {
+        return; // Q&A形式でない dt はスキップ
+      }
+
+      const questionId = $questionSpan.attr("id") || "";
+      const $questionTextSpan = $questionSpan.next("span");
+      const questionText = $questionTextSpan.text().trim();
+
+      if (!questionText || questionText.length < 5) {
+        return;
+      }
+
+      // 回答を取得: 対応する dd 内の div から
+      // dt の次の dd を取得
+      const $dd = $dt.next("dd");
+      if ($dd.length === 0) {
+        return;
+      }
+
+      // dd 内の回答テキストを取得（"A" ラベルを除外）
+      // <span>A</span> の次にある <div> から取得
+      const $answerDiv = $dd.find("> div");
+      let answerText = "";
+
+      if ($answerDiv.length > 0) {
+        answerText = $answerDiv.text().trim();
+      } else {
+        // div がない場合は dd 全体のテキストから "A" を除去
+        answerText = $dd
+          .text()
+          .trim()
+          .replace(/^A\s*/, "");
+      }
+
+      if (answerText && answerText.length > 10) {
+        items.push({
+          id: `${source}-${questionId || `q${items.length + 1}`}`,
+          category,
+          question: cleanText(questionText),
+          answer: cleanText(answerText),
+        });
+      }
+    });
   });
 
-  // Q&Aが見つからない場合、別のパターンを試す
+  // パターン2（フォールバック）: アンカーリンク形式
+  // パターン1で見つからなかった場合のみ実行
   if (items.length === 0) {
-    // テーブル形式のQ&A
-    $("table tr").each((_, row) => {
-      const cells = $(row).find("td");
-      if (cells.length >= 2) {
-        const question = $(cells[0]).text().trim();
-        const answer = $(cells[1]).text().trim();
+    // #qN 形式のリンクを収集
+    const qaLinks: { question: string; targetId: string }[] = [];
 
-        if (question && answer && question.length > 5) {
-          items.push({
-            id: `${source}-q${items.length + 1}`,
-            category: currentCategory,
-            question: cleanText(question),
-            answer: cleanText(answer),
+    $content.find('li a[href^="#q"]').each((_, a) => {
+      const $a = $(a);
+      const href = $a.attr("href") || "";
+
+      if (/^#q\d+$/i.test(href)) {
+        const question = $a.text().trim();
+        if (question.length > 10) {
+          qaLinks.push({
+            question,
+            targetId: href.replace("#", ""),
           });
         }
       }
     });
-  }
 
-  // まだ見つからない場合、リンクを含むリストを探す
-  if (items.length === 0) {
-    $("a[href*='#q']").each((_, link) => {
-      const question = $(link).text().trim();
-      const href = $(link).attr("href");
-      if (question && href) {
-        // リンク先のコンテンツを探す
-        const targetId = href.replace("#", "");
-        const targetEl = $(`#${targetId}, [name="${targetId}"]`);
-        if (targetEl.length > 0) {
-          // 回答はターゲット要素の次の兄弟または親の次の要素
-          const answerEl = targetEl.next();
-          const answer = answerEl.text().trim();
-          if (answer) {
+    // 各質問に対応する回答を取得
+    for (const qa of qaLinks) {
+      const $target = $content.find(`#${qa.targetId}`);
+      if ($target.length === 0) continue;
+
+      // ターゲット要素の親（dt）の次（dd）から回答を取得
+      const $dt = $target.closest("dt");
+      if ($dt.length > 0) {
+        const $dd = $dt.next("dd");
+        if ($dd.length > 0) {
+          const answerText = $dd.find("> div").text().trim() || $dd.text().replace(/^A\s*/, "").trim();
+          if (answerText.length > 10) {
             items.push({
-              id: `${source}-q${items.length + 1}`,
-              category: currentCategory,
-              question: cleanText(question),
-              answer: cleanText(answer),
+              id: `${source}-${qa.targetId}`,
+              category: "一般",
+              question: cleanText(qa.question),
+              answer: cleanText(answerText),
             });
           }
         }
       }
-    });
+    }
   }
 
   return { title, items };

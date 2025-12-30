@@ -5,6 +5,11 @@
 
 import type { LawData } from "../loaders/egov.js";
 
+/** 最小チャンクサイズ（これより小さいチャンクは次のチャンクと結合） */
+const MIN_CHUNK_SIZE = 100;
+/** 最大チャンクサイズ（マージ後にこれを超えないようにする） */
+const MAX_CHUNK_SIZE = 2000;
+
 export interface LawChunk {
   id: string;
   content: string;
@@ -136,20 +141,88 @@ function chunkByParagraph(law: LawData): LawChunk[] {
 }
 
 /**
+ * 小さすぎるチャンクを隣接チャンクとマージ
+ */
+function mergeSmallChunks(chunks: LawChunk[]): LawChunk[] {
+  if (chunks.length === 0) return [];
+
+  const result: LawChunk[] = [];
+  let pendingChunk: LawChunk | null = null;
+
+  for (const chunk of chunks) {
+    if (pendingChunk === null) {
+      if (chunk.content.length < MIN_CHUNK_SIZE) {
+        pendingChunk = chunk;
+      } else {
+        result.push(chunk);
+      }
+    } else {
+      const mergedContent = `${pendingChunk.content}\n\n${chunk.content}`;
+
+      if (mergedContent.length <= MAX_CHUNK_SIZE) {
+        // マージ可能 - 条番号は範囲を示す（例: "1-2"）
+        const mergedArticleNumber =
+          pendingChunk.metadata.articleNumber === chunk.metadata.articleNumber
+            ? pendingChunk.metadata.articleNumber
+            : `${pendingChunk.metadata.articleNumber}-${chunk.metadata.articleNumber}`;
+
+        const mergedChunk: LawChunk = {
+          id: `${chunk.metadata.lawId}-art${mergedArticleNumber}`,
+          content: mergedContent,
+          metadata: {
+            ...chunk.metadata,
+            articleNumber: mergedArticleNumber,
+            articleTitle: pendingChunk.metadata.articleTitle || chunk.metadata.articleTitle,
+          },
+        };
+
+        if (mergedChunk.content.length < MIN_CHUNK_SIZE) {
+          pendingChunk = mergedChunk;
+        } else {
+          result.push(mergedChunk);
+          pendingChunk = null;
+        }
+      } else {
+        result.push(pendingChunk);
+        if (chunk.content.length < MIN_CHUNK_SIZE) {
+          pendingChunk = chunk;
+        } else {
+          result.push(chunk);
+          pendingChunk = null;
+        }
+      }
+    }
+  }
+
+  if (pendingChunk !== null) {
+    result.push(pendingChunk);
+  }
+
+  return result;
+}
+
+/**
  * 法令をチャンク分割
  */
 export function chunkLaw(
   law: LawData,
   options: LawChunkerOptions = { chunkBy: "article" },
 ): LawChunk[] {
+  let chunks: LawChunk[];
+
   switch (options.chunkBy) {
     case "article":
-      return chunkByArticle(law);
+      chunks = chunkByArticle(law);
+      break;
     case "paragraph":
-      return chunkByParagraph(law);
+      chunks = chunkByParagraph(law);
+      break;
     default:
-      return chunkByArticle(law);
+      chunks = chunkByArticle(law);
   }
+
+  // 小さすぎるチャンクをマージ
+  return mergeSmallChunks(chunks);
 }
 
 /**

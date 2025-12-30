@@ -46,13 +46,21 @@ export interface StoredDocument {
   content: string;
   vector: number[];
   source: SourceType;
-  metadata: string; // JSON文字列として保存
+  // 頻繁にフィルタリングされるフィールドは個別カラムとして保存
+  articleNumber: string | null; // 法令: 条番号
+  category: string | null; // Q&A/ガイドライン: カテゴリ
+  filename: string | null; // ガイドライン: ファイル名
+  metadata: string; // その他メタデータはJSON文字列として保存
 }
 
 export interface SearchResult {
   id: string;
   content: string;
   source: SourceType;
+  // 頻繁にアクセスされるフィールドを直接公開
+  articleNumber: string | null;
+  category: string | null;
+  filename: string | null;
   metadata: Record<string, unknown>;
   score: number;
 }
@@ -128,13 +136,20 @@ export async function addDocuments(chunks: DocumentChunk[]): Promise<void> {
   }
 
   // LanceDB用のデータ形式に変換
-  const data: StoredDocument[] = chunks.map((chunk, i) => ({
-    id: chunk.id,
-    content: chunk.content,
-    vector: vectors[i],
-    source: chunk.metadata.source,
-    metadata: JSON.stringify(chunk.metadata),
-  }));
+  const data: StoredDocument[] = chunks.map((chunk, i) => {
+    const meta = chunk.metadata;
+    return {
+      id: chunk.id,
+      content: chunk.content,
+      vector: vectors[i],
+      source: meta.source,
+      // 頻繁にフィルタリングされるフィールドを個別カラムに展開
+      articleNumber: "articleNumber" in meta ? (meta.articleNumber as string) : null,
+      category: "category" in meta ? (meta.category as string) : null,
+      filename: "filename" in meta ? (meta.filename as string) : null,
+      metadata: JSON.stringify(meta),
+    };
+  });
 
   // LanceDBはRecord<string, unknown>[]を期待するのでキャスト
   // Note: これはLanceDBのAPI制約によるもの
@@ -165,10 +180,13 @@ function parseSearchResult(row: Record<string, unknown>): SearchResult {
   const id = row.id;
   const content = row.content;
   const source = row.source;
+  const articleNumber = row.articleNumber;
+  const category = row.category;
+  const filename = row.filename;
   const metadataStr = row.metadata;
   const distance = row._distance;
 
-  // 型チェック
+  // 必須フィールドの型チェック
   if (typeof id !== "string") {
     throw new Error(`Invalid id type: expected string, got ${typeof id}`);
   }
@@ -200,6 +218,9 @@ function parseSearchResult(row: Record<string, unknown>): SearchResult {
     id,
     content,
     source: validatedSource,
+    articleNumber: typeof articleNumber === "string" ? articleNumber : null,
+    category: typeof category === "string" ? category : null,
+    filename: typeof filename === "string" ? filename : null,
     metadata,
     score: distance,
   };
@@ -260,6 +281,7 @@ export async function search(
 
 /**
  * 複数ソースから並列検索
+ * デフォルトで法令・ガイドライン・Q&A全てを検索
  */
 export async function multiSearch(
   query: string,
@@ -268,7 +290,8 @@ export async function multiSearch(
     sources?: SourceType[];
   } = {},
 ): Promise<SearchResult[]> {
-  const { limitPerSource = 3, sources = ["law", "guideline"] } = options;
+  // デフォルトで全ソースを検索（Q&Aも含む）
+  const { limitPerSource = 3, sources = ["law", "guideline", "qa"] } = options;
 
   const searches = sources.map((source) => search(query, { limit: limitPerSource, source }));
 
