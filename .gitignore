@@ -12,6 +12,7 @@ dist/
 # Data directories
 data/raw/
 data/vectordb/
+data/cache/
 
 # IDE
 .vscode/

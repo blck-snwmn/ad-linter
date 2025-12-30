@@ -5,6 +5,7 @@
 
 import "dotenv/config";
 import { join } from "path";
+import { writeFileSync, mkdirSync, existsSync } from "fs";
 import { fetchKeihyoLaw } from "../src/data/loaders/egov.js";
 import { fetchAllQa } from "../src/data/loaders/qa.js";
 import { loadDownloadedGuidelines } from "../src/data/loaders/guideline.js";
@@ -14,9 +15,22 @@ import { chunkGuideline } from "../src/data/chunkers/guideline.js";
 import { addDocuments, clearTable, countDocuments } from "../src/retrieval/vectorStore.js";
 
 const DATA_DIR = join(process.cwd(), "data", "raw");
+const CACHE_DIR = join(process.cwd(), "data", "cache");
+
+/**
+ * キャッシュディレクトリを作成
+ */
+function ensureCacheDir() {
+  if (!existsSync(CACHE_DIR)) {
+    mkdirSync(CACHE_DIR, { recursive: true });
+  }
+}
 
 async function main() {
   console.log("=== データ取り込み開始 ===\n");
+
+  // キャッシュディレクトリを作成
+  ensureCacheDir();
 
   // 既存データをクリア
   console.log("既存データをクリア中...");
@@ -30,6 +44,25 @@ async function main() {
     console.log("e-Gov APIから景品表示法を取得中...");
     const law = await fetchKeihyoLaw();
     console.log(`✓ 取得完了: ${law.lawTitle} (${law.articles.length}条)`);
+
+    // ローカルキャッシュに保存（Claude Code等で読めるように）
+    const lawCachePath = join(CACHE_DIR, "keihyo-law.json");
+    const lawForCache = {
+      lawId: law.lawId,
+      lawNumber: law.lawNumber,
+      lawTitle: law.lawTitle,
+      articles: law.articles,
+      fetchedAt: new Date().toISOString(),
+    };
+    writeFileSync(lawCachePath, JSON.stringify(lawForCache, null, 2), "utf-8");
+    console.log(`✓ ローカルキャッシュに保存: ${lawCachePath}`);
+
+    // 生XMLも保存（デバッグ・監査用）
+    if (law.rawXml) {
+      const xmlCachePath = join(CACHE_DIR, "keihyo-law.xml");
+      writeFileSync(xmlCachePath, law.rawXml, "utf-8");
+      console.log(`✓ 生XMLを保存: ${xmlCachePath}`);
+    }
 
     console.log("チャンク分割中...");
     const lawChunks = chunkLaw(law, { chunkBy: "article" });
@@ -60,6 +93,18 @@ async function main() {
       for (const qa of qaDataList) {
         console.log(`  - ${qa.source}: ${qa.items.length}件`);
       }
+
+      // ローカルキャッシュに保存（Claude Code等で読めるように）
+      const qaCachePath = join(CACHE_DIR, "qa-data.json");
+      const qaForCache = qaDataList.map((qa) => ({
+        source: qa.source,
+        title: qa.title,
+        url: qa.url,
+        items: qa.items,
+        fetchedAt: qa.fetchedAt.toISOString(),
+      }));
+      writeFileSync(qaCachePath, JSON.stringify(qaForCache, null, 2), "utf-8");
+      console.log(`✓ ローカルキャッシュに保存: ${qaCachePath}`);
 
       console.log("チャンク分割中...");
       const qaChunks = chunkAllQa(qaDataList);
