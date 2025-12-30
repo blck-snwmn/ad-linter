@@ -26,7 +26,7 @@ export interface QaItem {
 }
 
 export interface QaData {
-  source: "representation" | "premium" | "guideline" | "purchase";
+  source: "representation" | "premium" | "guideline" | "purchase" | "stealth_marketing" | "card";
   title: string;
   url: string;
   items: QaItem[];
@@ -44,6 +44,11 @@ const QA_URLS = {
   guideline: "https://www.caa.go.jp/policies/policy/representation/fair_labeling/faq/guideline/",
   /** 買取サービスに関するQ&A */
   purchase: "https://www.caa.go.jp/policies/policy/representation/fair_labeling/faq/purchase/",
+  /** ステルスマーケティングに関するQ&A */
+  stealth_marketing:
+    "https://www.caa.go.jp/policies/policy/representation/fair_labeling/faq/stealth_marketing/",
+  /** インターネット上の取引と「カード合わせ」に関するQ&A */
+  card: "https://www.caa.go.jp/policies/policy/representation/fair_labeling/faq/card/",
 } as const;
 
 export type QaSource = keyof typeof QA_URLS;
@@ -262,7 +267,14 @@ export async function fetchAllQa(): Promise<{
   data: QaData[];
   errors: QaLoadError[];
 }> {
-  const sources: QaSource[] = ["representation", "premium", "guideline", "purchase"];
+  const sources: QaSource[] = [
+    "representation",
+    "premium",
+    "guideline",
+    "purchase",
+    "stealth_marketing",
+    "card",
+  ];
   const data: QaData[] = [];
   const errors: QaLoadError[] = [];
 

@@ -10,7 +10,13 @@ export interface QaChunk {
   content: string;
   metadata: {
     source: "qa";
-    qaSource: "representation" | "premium" | "guideline" | "purchase";
+    qaSource:
+      | "representation"
+      | "premium"
+      | "guideline"
+      | "purchase"
+      | "stealth_marketing"
+      | "card";
     category: string;
     originalId: string;
     url: string;
