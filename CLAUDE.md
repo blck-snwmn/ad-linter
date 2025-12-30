@@ -49,31 +49,22 @@
         │
         ▼
 ┌───────────────┐
-│ClaimExtractor │  主張抽出（優良/有利誤認トリガー検出）
-└───────────────┘
-        │
-        ▼
-┌───────────────┐
 │MultiRetriever │  並列RAG検索
 │ ├─ 法令       │  - 景表法条文
 │ ├─ ガイドライン│  - 消費者庁GL
-│ ├─ Q&A        │  - 公式Q&A
-│ └─ 違反事例   │  - 措置命令
+│ └─ Q&A        │  - 公式Q&A
 └───────────────┘
         │
         ▼
 ┌───────────────┐
-│ RiskAnalyzer  │  LLMによるリスク判定
-└───────────────┘
-        │
-        ▼
-┌───────────────┐
-│ResponseGen    │  出力生成（リスク/根拠/改善案）
+│ RiskAnalyzer  │  LLMによるリスク判定+レポート生成
 └───────────────┘
         │
         ▼
 [出力: リスク判定 + 根拠引用 + 改善提案]
 ```
+
+ClaimExtractorは漏れリスク回避のため省略し、全文でRAG検索を実行。
 
 ## データソース
 
@@ -86,33 +77,45 @@
 
 ## 開発ガイド
 
+### 使い方
+
+```bash
+# 広告文のリスクチェック
+npx tsx scripts/run-agent.ts "業界No.1の効果！"
+echo "広告文" | npx tsx scripts/run-agent.ts
+
+# テストケース実行
+npx tsx scripts/test-agent.ts
+
+# データ取り込み
+npm run ingest
+```
+
 ### LLM切替
 
 環境変数 `LLM_PROVIDER` で切替：
 
 ```bash
-# 開発フェーズ
-LLM_PROVIDER=gemini-flash
-
-# 検証フェーズ
-LLM_PROVIDER=gemini-pro
-LLM_PROVIDER=claude
-```
-
-### データ取り込み
-
-```bash
-npm run ingest
+LLM_PROVIDER=gemini-flash  # デフォルト（開発用）
+LLM_PROVIDER=gemini-pro    # 検証用
+LLM_PROVIDER=claude        # 高精度（要ANTHROPIC_API_KEY）
 ```
 
 ### プロジェクト構造
 
 ```
 src/
-├── models/           # LLM切替ロジック
-├── graph/            # LangGraphワークフロー
+├── agent/            # LangGraph Agent
+│   ├── graph.ts      # ワークフロー定義
+│   ├── state.ts      # State型定義
+│   ├── llm.ts        # LLM切替ロジック
+│   └── nodes/        # 各ノード実装
 ├── retrieval/        # LanceDB・Embedding
 └── data/
     ├── loaders/      # データ取得
     └── chunkers/     # チャンク分割
+scripts/
+├── run-agent.ts      # Agent実行
+├── test-agent.ts     # テストケース実行
+└── ingest.ts         # データ取り込み
 ```
